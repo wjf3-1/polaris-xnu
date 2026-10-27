@@ -1,11 +1,7 @@
-name: xnu
+﻿name: xnu
 
-# 无 Mac 内核构建：在 GitHub 的 macOS runner 上编译 polaris 的 XNU。
-#
-# 用法：
-#   1. 改 xnu-override.patch（我们的内核改动，diff 作用于上游的 xnu/patches/ 目录）
-#   2. commit 后自动触发（或 Actions 页面手动 Run workflow）
-#   3. 下载 artifact: xnu-kernel
+# 鏃?Mac 鍐呮牳鏋勫缓锛氬湪 GitHub 鐨?macOS runner 涓婄紪璇?polaris 鐨?XNU銆?#
+# 鐢ㄦ硶锛?#   1. 鏀?xnu-override.patch锛堟垜浠殑鍐呮牳鏀瑰姩锛宒iff 浣滅敤浜庝笂娓哥殑 xnu/patches/ 鐩綍锛?#   2. commit 鍚庤嚜鍔ㄨЕ鍙戯紙鎴?Actions 椤甸潰鎵嬪姩 Run workflow锛?#   3. 涓嬭浇 artifact: xnu-kernel
 on:
   workflow_dispatch:
   push:
@@ -18,13 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  MACOS_VERSION: "13.5"
+  KERNEL_CONFIG: DEVELOPMENT
+  MACHINE_CONFIG: SWEET
   UPSTREAM: luuu20309/ios16_on_polaris_mix2s
   DXB_REPO: https://github.com/blacktop/darwin-xnu-build
   DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
 
 jobs:
   build:
-    # macOS 14 自带 Xcode 15.x，其 iig 与 xnu-8796 的 IORPC ABI 匹配
+    # macOS 14 鑷甫 Xcode 15.x锛屽叾 iig 涓?xnu-8796 鐨?IORPC ABI 鍖归厤
     runs-on: macos-14
     timeout-minutes: 120
     steps:
@@ -43,7 +42,7 @@ jobs:
           git -C dxb fetch -q --depth 1 "$DXB_REPO" "$DXB_SHA"
           git -C dxb checkout -q FETCH_HEAD
           cp upstream/xnu/patches/*.patch upstream/xnu/patches/*.sh dxb/patches/
-          # libfirehose_kernel 只编 arm64e；SWEET 内核是纯 arm64
+          # libfirehose_kernel 鍙紪 arm64e锛汼WEET 鍐呮牳鏄函 arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
 
@@ -88,3 +87,4 @@ jobs:
           path: out/
           if-no-files-found: warn
           retention-days: 7
+
