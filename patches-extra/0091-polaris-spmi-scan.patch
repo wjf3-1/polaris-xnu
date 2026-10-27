@@ -1,0 +1,55 @@
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -54,6 +54,23 @@
+ 		}
+ 	}
+ 	return found;
++}
++
++/* Diagnostic: dump the arbiter PPID map so the real PMIC peripherals
++ * (PM8998 PON at 0x001, GPIO at 0x010) can be identified on hardware. */
++static void
++keys_scan(uint32_t count)
++{
++	printf("SWEET KEYS: SPMI scan arb=%#x apids=%u\n", keys_version, count);
++	for (uint32_t i = 0; i < count && i < 128; ++i) {
++		uint32_t map = keys_rd(keys_core, 0x900u + 4u * i);
++		if (map == 0) {
++			continue;
++		}
++		uint32_t ppid = (map >> 8) & 0xfffu;
++		uint32_t owner = keys_rd(keys_cnfg, 0x700u + 4u * i) & 7u;
++		printf("SWEET KEYS: apid=%u ppid=%#x owner=%u\n", i, ppid, owner);
++	}
+ }
+ 
+ static bool
+@@ -151,14 +168,28 @@
+ 		    keys_version, count);
+ 		return;
+ 	}
++	keys_scan(count);
+ 	keys_pon_apid = keys_find_apid(0x008, count);
++	if (keys_pon_apid == KEYS_NO_APID) {
++		keys_pon_apid = keys_find_apid(0x001, count);	/* PM8998 PON */
++	}
+ 	keys_gpio_apid = keys_find_apid(0x4c1, count);
++	if (keys_gpio_apid == KEYS_NO_APID) {
++		keys_gpio_apid = keys_find_apid(0x010, count);	/* PM8998 GPIO */
++	}
+ 	uint8_t pon = 0, gpio = 0, mode = 0, en = 0, subtype = 0;
+ 	bool pok = keys_read(keys_pon_apid, KEYS_PON_RT, &pon);
+ 	bool gok = keys_read(keys_gpio_apid, KEYS_GPIO_RT, &gpio);
+ 	bool mok = keys_read(keys_gpio_apid, 0xc140, &mode);
+ 	bool eok = keys_read(keys_gpio_apid, 0xc146, &en);
+ 	bool sok = keys_read(keys_gpio_apid, 0xc105, &subtype);
++	/* PM8998 GPIO6 (volume-up) candidates: per-GPIO block 0x100 stride. */
++	uint8_t g6a = 0, g6b = 0, pon2 = 0;
++	bool g6aok = keys_read(keys_gpio_apid, 0xc610, &g6a);
++	bool g6bok = keys_read(keys_gpio_apid, 0xc010, &g6b);
++	bool pon2ok = keys_read(keys_pon_apid, 0x0812, &pon2);
++	printf("SWEET KEYS: pm8998 probes g6c610=%#x/%d g6c010=%#x/%d pon812=%#x/%d\n",
++	    g6a, g6aok, g6b, g6bok, pon2, pon2ok);
+ 	printf("SWEET KEYS: arb=%#x apids=%u pon-apid=%u gpio4-apid=%u pon=%#x/%d gpio=%#x/%d mode=%#x/%d en=%#x/%d subtype=%#x/%d\n",
+ 	    keys_version, count, keys_pon_apid, keys_gpio_apid,
+ 	    pon, pok, gpio, gok, mode, mok, en, eok, subtype, sok);
