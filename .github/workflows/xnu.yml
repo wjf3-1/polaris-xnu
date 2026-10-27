@@ -15,7 +15,7 @@ concurrency:
 
 env:
   MACOS_VERSION: "13.5"
-  KERNEL_CONFIG: DEVELOPMENT
+  KERNEL_CONFIG: RELEASE
   MACHINE_CONFIG: SWEET
   UPSTREAM: luuu20309/ios16_on_polaris_mix2s
   DXB_REPO: https://github.com/blacktop/darwin-xnu-build
@@ -46,6 +46,14 @@ jobs:
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
 
+      - name: Add extra kernel patches
+        run: |
+          if compgen -G "patches-extra/*.patch" > /dev/null; then
+            cp patches-extra/*.patch dxb/patches/
+            echo "extra patches:"; ls dxb/patches | tail -5
+          else
+            echo "no extra patches"
+          fi
       - name: Apply our kernel overrides
         run: |
           if [ -s xnu-override.patch ]; then
@@ -83,8 +91,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: xnu-kernel
+          name: xnu-kernel-release
           path: out/
           if-no-files-found: warn
           retention-days: 7
+
+
 
