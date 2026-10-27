@@ -1,0 +1,18 @@
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -190,6 +190,15 @@
+ 	bool pon2ok = keys_read(keys_pon_apid, 0x0812, &pon2);
+ 	printf("SWEET KEYS: pm8998 probes g6c610=%#x/%d g6c010=%#x/%d pon812=%#x/%d\n",
+ 	    g6a, g6aok, g6b, g6bok, pon2, pon2ok);
++	{
++		int halt = 0;
++		(void)PE_parse_boot_argn("sweetkeys_halt", &halt, sizeof(halt));
++		if (halt) {
++			extern void halt_all_cpus(boolean_t reboot);
++			printf("SWEET KEYS: halting for diagnostics (sweetkeys_halt=1)\n");
++			halt_all_cpus(TRUE);
++		}
++	}
+ 	printf("SWEET KEYS: arb=%#x apids=%u pon-apid=%u gpio4-apid=%u pon=%#x/%d gpio=%#x/%d mode=%#x/%d en=%#x/%d subtype=%#x/%d\n",
+ 	    keys_version, count, keys_pon_apid, keys_gpio_apid,
+ 	    pon, pok, gpio, gok, mode, mok, en, eok, subtype, sok);
