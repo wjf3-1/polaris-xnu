@@ -1,0 +1,90 @@
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -21,12 +21,18 @@
+ #define KEYS_OBS_PA      0x0e600000u
+ #define KEYS_CNFG_PA     0x0c40a000u
+ #define KEYS_PON_RT      0x0810u
+-#define KEYS_GPIO_RT     0xc110u
++#define KEYS_GPIO_RT     0xc110u	/* sweet: PM6150L GPIO2 block */
++#define KEYS_GPIO_RT_POL 0x10u		/* polaris: PM8998 GPIO6 RT_STS */
++#define KEYS_PPID_GPIO_SWEET   0x4c1u
++#define KEYS_PPID_GPIO_POLARIS 0x0c5u
+ #define KEYS_NO_APID     0xffffu
+ 
+ static vm_offset_t keys_core, keys_obs, keys_cnfg;
+ static uint16_t keys_pon_apid = KEYS_NO_APID, keys_gpio_apid = KEYS_NO_APID;
+ static uint32_t keys_version, keys_last_status;
++static uint16_t keys_gpio_rt = KEYS_GPIO_RT;
++static bool keys_polaris;
++static uint8_t keys_last_vol = 0xffu;
+ static bool keys_started;
+ static int keys_sleep_chan;
+ 
+@@ -54,6 +60,21 @@
+ 		}
+ 	}
+ 	return found;
++}
++
++/* Diagnostic: dump the arbiter PPID map (identifies PM8998 peripherals). */
++static void
++keys_scan(uint32_t count)
++{
++	printf("SWEET KEYS: SPMI scan arb=%#x apids=%u\n", keys_version, count);
++	for (uint32_t i = 0; i < count && i < 128; ++i) {
++		uint32_t map = keys_rd(keys_core, 0x900u + 4u * i);
++		if (map == 0) {
++			continue;
++		}
++		printf("SWEET KEYS: apid=%u ppid=%#x owner=%u\n", i,
++		    (map >> 8) & 0xfffu, keys_rd(keys_cnfg, 0x700u + 4u * i) & 7u);
++	}
+ }
+ 
+ static bool
+@@ -100,7 +121,12 @@
+ 	for (;;) {
+ 		uint8_t pon = 0, gpio = 0;
+ 		bool pok = keys_read(keys_pon_apid, KEYS_PON_RT, &pon);
+-		bool gok = keys_read(keys_gpio_apid, KEYS_GPIO_RT, &gpio);
++		bool gok = keys_read(keys_gpio_apid, keys_gpio_rt, &gpio);
++		if (gok && gpio != keys_last_vol) {
++			printf("SWEET KEYS: vol byte %#x -> %#x (changed %#x)\n",
++			    keys_last_vol, gpio, keys_last_vol ^ gpio);
++			keys_last_vol = gpio;
++		}
+ 		int now[3] = {!!(pon & 1u), !(gpio & 1u), !!(pon & 2u)};
+ 		if (!pok || !gok) {
+ 			if ((errors++ % 250u) == 0) {
+@@ -151,11 +177,19 @@
+ 		    keys_version, count);
+ 		return;
+ 	}
++	keys_scan(count);
+ 	keys_pon_apid = keys_find_apid(0x008, count);
+-	keys_gpio_apid = keys_find_apid(0x4c1, count);
++	keys_gpio_apid = keys_find_apid(KEYS_PPID_GPIO_SWEET, count);
++	if (keys_gpio_apid == KEYS_NO_APID) {
++		keys_polaris = true;
++		keys_gpio_apid = keys_find_apid(KEYS_PPID_GPIO_POLARIS, count);
++		keys_gpio_rt = KEYS_GPIO_RT_POL;
++		printf("SWEET KEYS: polaris PM8998 GPIO6 ppid=%#x apid=%u rt=%#x\n",
++		    KEYS_PPID_GPIO_POLARIS, keys_gpio_apid, keys_gpio_rt);
++	}
+ 	uint8_t pon = 0, gpio = 0, mode = 0, en = 0, subtype = 0;
+ 	bool pok = keys_read(keys_pon_apid, KEYS_PON_RT, &pon);
+-	bool gok = keys_read(keys_gpio_apid, KEYS_GPIO_RT, &gpio);
++	bool gok = keys_read(keys_gpio_apid, keys_gpio_rt, &gpio);
+ 	bool mok = keys_read(keys_gpio_apid, 0xc140, &mode);
+ 	bool eok = keys_read(keys_gpio_apid, 0xc146, &en);
+ 	bool sok = keys_read(keys_gpio_apid, 0xc105, &subtype);
+@@ -165,7 +199,8 @@
+ 	/* GPIO configuration belongs to firmware. Diagnose, never repair it here. */
+ 	unsigned dir = subtype >= 0x10u && subtype <= 0x13u ?
+ 	    mode & 3u : (mode >> 4) & 7u;
+-	if (!eok || !mok || !sok || !(en & 0x80u) || (dir != 0 && dir != 2)) {
++	if (!keys_polaris && (!eok || !mok || !sok || !(en & 0x80u) ||
++	    (dir != 0 && dir != 2))) {
+ 		printf("SWEET KEYS: GPIO2 not confirmed enabled as input; volume-up withheld, PMIC unchanged\n");
+ 		keys_gpio_apid = KEYS_NO_APID;
+ 	}
